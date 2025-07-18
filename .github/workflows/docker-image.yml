@@ -1,0 +1,112 @@
+name: Docker Publish
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      
+    strategy:
+      matrix:
+        framework: [nextjs, react, php, nuxtjs, flutter, express, django]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.framework }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=tag
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./backend/src/Dockerfiles/${{ matrix.framework }}.Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+        
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.framework }}:latest
+        format: spdx-json
+        output-file: sbom-${{ matrix.framework }}.spdx.json
+        
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ matrix.framework }}
+        path: sbom-${{ matrix.framework }}.spdx.json
+
+  create-release-notes:
+    name: Create Release Notes
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Generate release notes
+      run: |
+        echo "## Soul Release ${{ github.ref_name }}" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Docker Images Built:" >> release_notes.md
+        echo "- Next.js: \`ghcr.io/${{ github.repository }}-nextjs:${{ github.ref_name }}\`" >> release_notes.md
+        echo "- React.js: \`ghcr.io/${{ github.repository }}-react:${{ github.ref_name }}\`" >> release_notes.md
+        echo "- PHP: \`ghcr.io/${{ github.repository }}-php:${{ github.ref_name }}\`" >> release_notes.md
+        echo "- Nuxt.js: \`ghcr.io/${{ github.repository }}-nuxtjs:${{ github.ref_name }}\`" >> release_notes.md
+        echo "- Flutter: \`ghcr.io/${{ github.repository }}-flutter:${{ github.ref_name }}\`" >> release_notes.md
+        echo "- Express.js: \`ghcr.io/${{ github.repository }}-express:${{ github.ref_name }}\`" >> release_notes.md
+        echo "- Django: \`ghcr.io/${{ github.repository }}-django:${{ github.ref_name }}\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Installation:" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "git clone https://github.com/${{ github.repository }}.git" >> release_notes.md
+        echo "cd soul" >> release_notes.md
+        echo "sh start.sh" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        
+    - name: Upload release notes
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-notes
+        path: release_notes.md
