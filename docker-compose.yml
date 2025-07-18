@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  soul-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.ts:/app/config.ts:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  soul-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://soul-backend:4000
+    depends_on:
+      - soul-backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Framework-specific services (examples)
+  soul-nextjs-template:
+    build:
+      context: .
+      dockerfile: ./backend/src/Dockerfiles/nextjs.Dockerfile
+    ports:
+      - "3001:3001"
+    profiles:
+      - templates
+    restart: "no"
+
+  soul-react-template:
+    build:
+      context: .
+      dockerfile: ./backend/src/Dockerfiles/react.Dockerfile
+    ports:
+      - "5173:5173"
+    profiles:
+      - templates
+    restart: "no"
+
+  soul-php-template:
+    build:
+      context: .
+      dockerfile: ./backend/src/Dockerfiles/php.Dockerfile
+    ports:
+      - "8080:80"
+    profiles:
+      - templates
+    restart: "no"
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    name: soul-network

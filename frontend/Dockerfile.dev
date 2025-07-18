@@ -1,0 +1,23 @@
+FROM node:18-alpine
+
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:$PATH"
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lock* ./
+
+# Install dependencies
+RUN bun install
+
+# Copy source code
+COPY . .
+
+EXPOSE 3000
+
+CMD ["bun", "dev"]

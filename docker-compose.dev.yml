@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  soul-backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend:/app
+      - ./config.ts:/app/config.ts:ro
+      - /app/node_modules
+    depends_on:
+      - redis-dev
+    restart: unless-stopped
+    command: bun --watch src/index.ts
+
+  soul-frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - soul-backend-dev
+    restart: unless-stopped
+    command: bun dev
+
+  redis-dev:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    restart: unless-stopped
+
+volumes:
+  redis_dev_data:
+
+networks:
+  default:
+    name: soul-dev-network
